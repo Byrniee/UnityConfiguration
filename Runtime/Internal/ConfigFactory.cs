@@ -24,18 +24,15 @@ namespace Byrniee.UnityConfiguration.Internal
         /// <inheritdoc />
         public IConfig<T> Create<T>(string index)
         {
+            Config<T> config = new Config<T>();
+
             if (!configFile.ContainsKey(index))
             {
-                throw new ArgumentOutOfRangeException("index", $"{index} was not found in the config file.");
+                string json = configFile[index].ToString();
+                config.Value = JsonConvert.DeserializeObject<T>(json);
             }
 
-            string json = configFile[index].ToString();
-            T value = JsonConvert.DeserializeObject<T>(json);
-
-            return new Config<T>()
-            {
-                Value = value,
-            };
+            return config;
         }
 
         private Dictionary<string, object> ReadConfigFile()
