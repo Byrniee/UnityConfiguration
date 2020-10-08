@@ -31,6 +31,11 @@ namespace Byrniee.UnityConfiguration.Internal
                 string json = configFile[index].ToString();
                 config.Value = JsonConvert.DeserializeObject<T>(json);
             }
+            else
+            {
+                // Create new or default.
+                config.Value = JsonConvert.DeserializeObject<T>("{}");
+            }
 
             return config;
         }
