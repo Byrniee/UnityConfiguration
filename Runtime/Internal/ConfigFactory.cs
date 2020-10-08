@@ -26,7 +26,7 @@ namespace Byrniee.UnityConfiguration.Internal
         {
             Config<T> config = new Config<T>();
 
-            if (!configFile.ContainsKey(index))
+            if (configFile.ContainsKey(index))
             {
                 string json = configFile[index].ToString();
                 config.Value = JsonConvert.DeserializeObject<T>(json);
