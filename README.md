@@ -11,7 +11,7 @@ Add the package to your manifest.json file located under the Packages folder.
 ```
 
 ### Usage
-Create a `config.json` file in te root of the project (next to the assets folder).
+Create a `config.json` file in the root of the project (next to the assets folder).
 For a build, place next to the .exe file.
 
 ```
