@@ -1,6 +1,8 @@
 {
     "name": "Byrniee.UnityConfiguration",
-    "references": [],
+    "references": [
+        "Byrniee.UnityJson"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
