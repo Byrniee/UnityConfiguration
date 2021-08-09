@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using UnityEditor;
+using UnityEditor.Build.Reporting;
 using UnityEditor.Callbacks;
 using UnityEngine;
 
@@ -11,12 +12,17 @@ namespace Byrniee.UnityConfiguration.Editor
     /// </summary>
     public class ConfigPostBuild : MonoBehaviour
     {
+        private const string ConfigFilename = "config.json";
+        
         [PostProcessBuild(1)]
         public static void OnPostprocessBuild(BuildTarget target, string pathToBuiltProject)
         {
-            if (File.Exists("config.json"))
+            string filePath = Path.Combine(Application.dataPath, "../", ConfigFilename);
+            if (File.Exists(filePath))
             {
-                File.Copy("config.json", Path.Combine(pathToBuiltProject, "config.json"));
+                string projectFileName = Path.GetFileName(pathToBuiltProject);
+                string buildFolder = pathToBuiltProject.Replace(projectFileName, string.Empty);
+                File.Copy(filePath, Path.Combine(buildFolder, ConfigFilename));
             }
         }
     }

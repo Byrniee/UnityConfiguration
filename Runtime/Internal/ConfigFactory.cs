@@ -11,10 +11,12 @@ namespace Byrniee.UnityConfiguration.Internal
     /// </summary>
     public class ConfigFactory : IConfigFactory
     {
+        private const string ConfigFilename = "config.json";
+        private const string EnvironmentFilename = ".env";
         private readonly Dictionary<string, object> configFile;
 
         /// <summary>
-        /// Initalises a new instance of the <see cref="ConfigFactory"/> class.
+        /// Initialises a new instance of the <see cref="ConfigFactory"/> class.
         /// </summary>
         public ConfigFactory()
         {
@@ -43,7 +45,7 @@ namespace Byrniee.UnityConfiguration.Internal
         private Dictionary<string, object> ReadConfigFile()
         {
             // Next to the .exe.
-            string filePath = Path.Combine(Application.dataPath, "../", "config.json");
+            string filePath = Path.Combine(Application.dataPath, "../", ConfigFilename);
 
             if (!File.Exists(filePath))
             {
@@ -51,7 +53,31 @@ namespace Byrniee.UnityConfiguration.Internal
             }
 
             string json = File.ReadAllText(filePath);
+            json = InjectEnvironmentVariables(json);
             return JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+        }
+
+        private string InjectEnvironmentVariables(string json)
+        {
+            // Next to the .exe and config file.
+            string filePath = Path.Combine(Application.dataPath, "../", EnvironmentFilename);
+            if (!File.Exists(filePath))
+            {
+                return json;
+            }
+
+            foreach (string line in File.ReadAllLines(filePath))
+            {
+                string[] parts = line.Split(new char[] { '=' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length != 2)
+                {
+                    continue;
+                }
+
+                json = json.Replace($"${{{parts[0]}}}", parts[1]);
+            }
+
+            return json;
         }
     }
 }
