@@ -1,28 +1,36 @@
-﻿using System.IO;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEditor;
-using UnityEditor.Build.Reporting;
 using UnityEditor.Callbacks;
 using UnityEngine;
 
 namespace Byrniee.UnityConfiguration.Editor
 {
     /// <summary>
-    /// Post build script for coping the config file to the
+    /// Post build script for coping the config files to the
     /// build directory.
     /// </summary>
     public class ConfigPostBuild : MonoBehaviour
     {
-        private const string ConfigFilename = "config.json";
+        private const string ConfigFilenamePrefix = "config";
+        private const string ConfigFilenamePostfix = ".json";
         
         [PostProcessBuild(1)]
         public static void OnPostprocessBuild(BuildTarget target, string pathToBuiltProject)
         {
-            string filePath = Path.Combine(Application.dataPath, "../", ConfigFilename);
-            if (File.Exists(filePath))
+            string directoryPath = Path.Combine(Application.dataPath, "../");
+            IList<string> configFiles = Directory.GetFiles(directoryPath)
+                .Select(x => x.Replace(directoryPath, string.Empty))
+                .Where(x => x.StartsWith(ConfigFilenamePrefix, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            string projectFileName = Path.GetFileName(pathToBuiltProject);
+            string buildFolder = pathToBuiltProject.Replace(projectFileName, string.Empty);
+            foreach (string configFile in configFiles)
             {
-                string projectFileName = Path.GetFileName(pathToBuiltProject);
-                string buildFolder = pathToBuiltProject.Replace(projectFileName, string.Empty);
-                File.Copy(filePath, Path.Combine(buildFolder, ConfigFilename));
+                File.Copy(Path.Combine(directoryPath, configFile), Path.Combine(buildFolder, configFile), true);
             }
         }
     }
