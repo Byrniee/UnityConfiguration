@@ -3,39 +3,90 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
-using UnityEngine;
+using Newtonsoft.Json.Linq;
 
 namespace Byrniee.UnityConfiguration.Internal
 {
     /// <summary>
     /// Factory class for creating the config classes.
     /// </summary>
-    public class ConfigFactory : IConfigFactory
+    public class ConfigFactory : IConfigFactory, IConfigDiagnostics
     {
-        private const string ConfigFilenamePrefix = "config";
-        private const string ConfigFilenamePostfix = ".json";
-        private const string EnvironmentFilename = ".env";
-        private const string UnityEnvironment = "UNITY_ENVIRONMENT";
-        
-        private readonly Dictionary<string, object> configFile;
+        private static readonly JsonMergeSettings MergeSettings = new JsonMergeSettings
+        {
+            MergeArrayHandling = MergeArrayHandling.Replace,
+            MergeNullValueHandling = MergeNullValueHandling.Merge,
+        };
+
+        private static readonly JsonLoadSettings LoadSettings = new JsonLoadSettings
+        {
+            CommentHandling = CommentHandling.Ignore,
+        };
+
+        private readonly JObject configFile;
+        private readonly HashSet<string> requestedSections = new HashSet<string>(StringComparer.Ordinal);
+        private readonly object requestedSectionsLock = new object();
 
         /// <summary>
-        /// Initialises a new instance of the <see cref="ConfigFactory"/> class.
+        /// Initialises a new instance of the <see cref="ConfigFactory"/> class, reading from
+        /// <see cref="ConfigEnvironment.DefaultConfigDirectory"/>.
         /// </summary>
         public ConfigFactory()
+            : this(ConfigEnvironment.DefaultConfigDirectory)
         {
-            configFile = ReadConfigFile();
         }
+
+        /// <summary>
+        /// Initialises a new instance of the <see cref="ConfigFactory"/> class, reading from
+        /// <paramref name="configDirectory"/>.
+        /// </summary>
+        /// <param name="configDirectory">The directory containing the config and .env files.</param>
+        public ConfigFactory(string configDirectory)
+            : this(configDirectory, Environment.GetEnvironmentVariable)
+        {
+        }
+
+        internal ConfigFactory(string configDirectory, Func<string, string> getEnvironmentVariable)
+        {
+            EnvironmentName = ConfigEnvironment.ResolveEnvironmentName(configDirectory, getEnvironmentVariable);
+
+            configFile = new JObject();
+            List<string> loadedFiles = new List<string>();
+            foreach (string fileName in ConfigEnvironment.GetLayerFileNames(EnvironmentName))
+            {
+                string filePath = Path.GetFullPath(Path.Combine(configDirectory, fileName));
+                if (!File.Exists(filePath))
+                {
+                    continue;
+                }
+
+                configFile.Merge(ReadConfigFile(filePath), MergeSettings);
+                loadedFiles.Add(filePath);
+            }
+
+            LoadedFiles = loadedFiles.AsReadOnly();
+        }
+
+        /// <inheritdoc />
+        public string EnvironmentName { get; }
+
+        /// <inheritdoc />
+        public IReadOnlyList<string> LoadedFiles { get; }
 
         /// <inheritdoc />
         public IConfig<T> Create<T>(string index)
         {
+            lock (requestedSectionsLock)
+            {
+                requestedSections.Add(index);
+            }
+
             Config<T> config = new Config<T>();
 
-            if (configFile.TryGetValue(index, out object value))
+            JToken section = configFile[index];
+            if (section != null && section.Type != JTokenType.Null)
             {
-                string json = value.ToString();
-                config.Value = JsonConvert.DeserializeObject<T>(json);
+                config.Value = section.ToObject<T>();
             }
             else
             {
@@ -46,72 +97,40 @@ namespace Byrniee.UnityConfiguration.Internal
             return config;
         }
 
-        private Dictionary<string, object> ReadConfigFile()
+        /// <inheritdoc />
+        public IReadOnlyCollection<string> GetUnrequestedSections()
         {
-            // Read the base config file.
-            string baseConfigFilename = $"{ConfigFilenamePrefix}{ConfigFilenamePostfix}";
-            string baseConfigFilePath = Path.Combine(Application.dataPath, "../", baseConfigFilename);
-            Dictionary<string, object> baseConfig = ReadConfigFile(baseConfigFilePath);
-            
-            // Check for an environment.
-            string environmentFilePath = Path.Combine(Application.dataPath, "../", EnvironmentFilename);
-            if (!TryGetEnvironmentName(environmentFilePath, out string environmentName))
+            lock (requestedSectionsLock)
             {
-                return baseConfig;
+                return configFile.Properties()
+                    .Select(x => x.Name)
+                    .Where(x => !requestedSections.Contains(x))
+                    .ToList()
+                    .AsReadOnly();
             }
-            
-            // Read the environment config
-            string environmentConfigFilename = $"{ConfigFilenamePrefix}.{environmentName}{ConfigFilenamePostfix}";
-            string environmentConfigFilePath = Path.Combine(Application.dataPath, "../", environmentConfigFilename);
-            Dictionary<string, object> environmentConfig = ReadConfigFile(environmentConfigFilePath);
-            
-            // Apply the environment config to the base config
-            foreach (string key in environmentConfig.Keys)
-            {
-                // This will add any new keys, and overwrite any existing base config with the environment config. 
-                baseConfig[key] = environmentConfig[key];
-            }
-
-            return baseConfig;
         }
 
-        private Dictionary<string, object> ReadConfigFile(string filePath)
+        private static JObject ReadConfigFile(string filePath)
         {
-            if (!File.Exists(filePath))
-            {
-                return new Dictionary<string, object>();
-            }
-            
             string json = File.ReadAllText(filePath);
-            return JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-        }
-
-        private bool TryGetEnvironmentName(string filePath, out string environmentName)
-        {
-            if (!File.Exists(filePath))
+            if (string.IsNullOrWhiteSpace(json))
             {
-                environmentName = string.Empty;
-                return false;
+                return new JObject();
             }
 
-            string[] lines = File.ReadAllLines(filePath);
-            environmentName = lines
-                .Select(SplitEnvLine)
-                .FirstOrDefault(x => x.Key == UnityEnvironment)
-                .Value;
-            
-            return !string.IsNullOrEmpty(environmentName);
-        }
-
-        private (string Key, string Value) SplitEnvLine(string line)
-        {
-            string[] parts = line.Split(new char[] { '=' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 2)
+            try
             {
-                return (string.Empty, string.Empty);
+                // Comments and unquoted property names are tolerated by the reader. Dates are left as
+                // strings so they reach the target type exactly as written.
+                using (JsonTextReader reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None })
+                {
+                    return JObject.Load(reader, LoadSettings);
+                }
             }
-
-            return (parts[0], parts[1]);
+            catch (JsonReaderException e)
+            {
+                throw new JsonReaderException($"Failed to read config file '{filePath}': {e.Message}", e);
+            }
         }
     }
 }

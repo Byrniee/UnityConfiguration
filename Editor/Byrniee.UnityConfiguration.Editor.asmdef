@@ -1,6 +1,8 @@
 {
     "name": "Byrniee.UnityConfiguration.Editor",
-    "references": [],
+    "references": [
+        "Byrniee.UnityConfiguration"
+    ],
     "includePlatforms": [
         "Editor"
     ],

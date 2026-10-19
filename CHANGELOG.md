@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026/10/19
+### Breaking
+- Environment config is now **merged value by value** instead of replacing whole sections. A key missing
+  from an environment file now **inherits the base value** instead of disappearing. Previously
+  `config.Staging.json` containing `{ "Server": { "Host": "x" } }` dropped every other `Server` value;
+  now only `Server.Host` changes. Arrays are still replaced (not appended), and an explicit `null`
+  overwrites the base value.
+- The post build step now copies only `config.json` and the layer files for the current
+  `UNITY_ENVIRONMENT`, instead of every `config*.json` file.
+- Config files are read with dates left as strings, so a date-like string value reaches a `string`
+  property exactly as written instead of being reformatted.
+
+### Added
+- Layered environments: `UNITY_ENVIRONMENT=Manchester.Strongman` loads `config.json`,
+  `config.Manchester.json` and `config.Manchester.Strongman.json` in order, skipping any that don't exist.
+- The `UNITY_ENVIRONMENT` process environment variable takes precedence over the `.env` file.
+- `IConfigDiagnostics` (implemented by `ConfigFactory`): `EnvironmentName`, `LoadedFiles` (the layer files
+  applied, in order) and `GetUnrequestedSections()` for spotting unused config sections.
+- `ConfigEnvironment` helper for resolving the environment and its layer file names.
+- `ConfigFactory(string configDirectory)` constructor.
+- `BYRNIEE_UNITYCONFIGURATION_DISABLE_POSTBUILD_COPY` scripting define to skip the post build copy.
+- EditMode tests.
+
+### Changed
+- Parse errors now include the path of the config file that failed.
+- `.env` parsing ignores blank lines and `#` comments, allows `=` in values and strips surrounding quotes.
+
 ## [1.3.0] - 2023/06/27
 ### Changed
 - Updated to work closer to the appsettings.json setup in a ASP.Net Core application.
