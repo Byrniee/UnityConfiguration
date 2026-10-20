@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
@@ -7,37 +9,29 @@ using UnityEngine;
 namespace Byrniee.UnityConfiguration.Editor
 {
     /// <summary>
-    /// Post build script for coping the config files for the current environment
-    /// to the build directory. Define <c>BYRNIEE_UNITYCONFIGURATION_DISABLE_POSTBUILD_COPY</c>
-    /// in the scripting define symbols to skip the copy.
+    /// Post build script for coping the config files to the
+    /// build directory.
     /// </summary>
     public class ConfigPostBuild : MonoBehaviour
     {
+        private const string ConfigFilenamePrefix = "config";
+        private const string ConfigFilenamePostfix = ".json";
+        
         [PostProcessBuild(1)]
         public static void OnPostprocessBuild(BuildTarget target, string pathToBuiltProject)
         {
-#if BYRNIEE_UNITYCONFIGURATION_DISABLE_POSTBUILD_COPY
-            return;
-#else
-            string sourceDirectory = ConfigEnvironment.DefaultConfigDirectory;
-            string environmentName = ConfigEnvironment.ResolveEnvironmentName(sourceDirectory);
-            string buildFolder = Path.GetDirectoryName(pathToBuiltProject);
+            string directoryPath = Path.Combine(Application.dataPath, "../");
+            IList<string> configFiles = Directory.GetFiles(directoryPath)
+                .Select(x => x.Replace(directoryPath, string.Empty))
+                .Where(x => x.StartsWith(ConfigFilenamePrefix, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
-            List<string> copiedFiles = new List<string>();
-            foreach (string configFile in ConfigEnvironment.GetLayerFileNames(environmentName))
+            string projectFileName = Path.GetFileName(pathToBuiltProject);
+            string buildFolder = pathToBuiltProject.Replace(projectFileName, string.Empty);
+            foreach (string configFile in configFiles)
             {
-                string sourcePath = Path.Combine(sourceDirectory, configFile);
-                if (!File.Exists(sourcePath))
-                {
-                    continue;
-                }
-
-                File.Copy(sourcePath, Path.Combine(buildFolder, configFile), true);
-                copiedFiles.Add(configFile);
+                File.Copy(Path.Combine(directoryPath, configFile), Path.Combine(buildFolder, configFile), true);
             }
-
-            Debug.Log($"UnityConfiguration: copied [{string.Join(", ", copiedFiles)}] for environment '{environmentName ?? "(none)"}' to {buildFolder}");
-#endif
         }
     }
 }

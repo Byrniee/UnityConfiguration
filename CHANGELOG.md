@@ -11,8 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.Staging.json` containing `{ "Server": { "Host": "x" } }` dropped every other `Server` value;
   now only `Server.Host` changes. Arrays are still replaced (not appended), and an explicit `null`
   overwrites the base value.
-- The post build step now copies only `config.json` and the layer files for the current
-  `UNITY_ENVIRONMENT`, instead of every `config*.json` file.
 - Config files are read with dates left as strings, so a date-like string value reaches a `string`
   property exactly as written instead of being reformatted.
 
@@ -24,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   applied, in order) and `GetUnrequestedSections()` for spotting unused config sections.
 - `ConfigEnvironment` helper for resolving the environment and its layer file names.
 - `ConfigFactory(string configDirectory)` constructor.
-- `BYRNIEE_UNITYCONFIGURATION_DISABLE_POSTBUILD_COPY` scripting define to skip the post build copy.
 - EditMode tests.
 
 ### Changed

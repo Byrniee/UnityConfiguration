@@ -79,13 +79,8 @@ if (unused.Count > 0)
   `Create<T>`. The library doesn't log this itself.
 
 ### Builds
-After a build, `config.json` and the layer files for the current `UNITY_ENVIRONMENT` (resolved in the
-editor with the precedence above) are copied next to the built player. Other `config.*.json` files are not
-copied, and neither is `.env`: set `UNITY_ENVIRONMENT` on the target machine, or deploy a `.env` file with
-the build.
-
-To skip the copy, for example when config is deployed separately, add
-`BYRNIEE_UNITYCONFIGURATION_DISABLE_POSTBUILD_COPY` to the Scripting Define Symbols in Player Settings.
+After a build, every `config*.json` file in the project root is copied next to the built player. The `.env`
+file is not copied: set `UNITY_ENVIRONMENT` on the target machine, or deploy a `.env` file with the build.
 
 ### Tests
 EditMode tests live in `Tests/Editor`. To run them from a project that consumes the package, add it to
