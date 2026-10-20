@@ -21,6 +21,12 @@ namespace Byrniee.UnityConfiguration
         /// </summary>
         public const string EnvironmentFilename = ".env";
 
+        /// <summary>
+        /// The separator between path segments in an override key. <c>ApiSettings__ApiKey</c> overrides
+        /// <c>ApiKey</c> in the <c>ApiSettings</c> section.
+        /// </summary>
+        public const string KeySeparator = "__";
+
         private const string ConfigFilenamePrefix = "config";
         private const string ConfigFilenamePostfix = ".json";
 
@@ -74,23 +80,57 @@ namespace Byrniee.UnityConfiguration
 
         internal static string ResolveEnvironmentName(string configDirectory, Func<string, string> getEnvironmentVariable)
         {
+            return ResolveEnvironmentName(getEnvironmentVariable, ReadEnvironmentFile(Path.Combine(configDirectory, EnvironmentFilename)));
+        }
+
+        internal static string ResolveEnvironmentName(
+            Func<string, string> getEnvironmentVariable,
+            IEnumerable<KeyValuePair<string, string>> environmentFileEntries)
+        {
             string fromVariable = getEnvironmentVariable(VariableName);
             if (!string.IsNullOrWhiteSpace(fromVariable))
             {
                 return fromVariable.Trim();
             }
 
-            string fromFile = ReadEnvironmentFile(Path.Combine(configDirectory, EnvironmentFilename));
+            string fromFile = environmentFileEntries
+                .Where(x => x.Key == VariableName)
+                .Select(x => x.Value)
+                .FirstOrDefault();
             return string.IsNullOrWhiteSpace(fromFile) ? null : fromFile;
         }
 
-        private static string ReadEnvironmentFile(string filePath)
+        /// <summary>
+        /// Splits an override key such as <c>ApiSettings__ApiKey</c> into its path segments.
+        /// </summary>
+        /// <param name="key">The environment variable or <c>.env</c> key.</param>
+        /// <returns>The path segments, or null if the key has no separator or an empty segment.</returns>
+        internal static string[] GetOverridePath(string key)
         {
-            if (!File.Exists(filePath))
+            if (key == null || !key.Contains(KeySeparator))
             {
                 return null;
             }
 
+            string[] segments = key.Split(new[] { KeySeparator }, StringSplitOptions.None);
+            return segments.Any(string.IsNullOrWhiteSpace) ? null : segments;
+        }
+
+        /// <summary>
+        /// Reads the entries of a <c>.env</c> file in file order. If a key appears more than once, the
+        /// first entry wins.
+        /// </summary>
+        /// <param name="filePath">The path of the <c>.env</c> file.</param>
+        /// <returns>The entries, or an empty list if the file doesn't exist.</returns>
+        internal static IReadOnlyList<KeyValuePair<string, string>> ReadEnvironmentFile(string filePath)
+        {
+            List<KeyValuePair<string, string>> entries = new List<KeyValuePair<string, string>>();
+            if (!File.Exists(filePath))
+            {
+                return entries;
+            }
+
+            HashSet<string> seenKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (string rawLine in File.ReadAllLines(filePath))
             {
                 string line = rawLine.Trim();
@@ -100,7 +140,13 @@ namespace Byrniee.UnityConfiguration
                 }
 
                 int separatorIndex = line.IndexOf('=');
-                if (separatorIndex <= 0 || line.Substring(0, separatorIndex).Trim() != VariableName)
+                if (separatorIndex <= 0)
+                {
+                    continue;
+                }
+
+                string key = line.Substring(0, separatorIndex).Trim();
+                if (!seenKeys.Add(key))
                 {
                     continue;
                 }
@@ -111,10 +157,10 @@ namespace Byrniee.UnityConfiguration
                     value = value.Substring(1, value.Length - 2).Trim();
                 }
 
-                return value;
+                entries.Add(new KeyValuePair<string, string>(key, value));
             }
 
-            return null;
+            return entries;
         }
     }
 }

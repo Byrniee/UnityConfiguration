@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026/10/20
+### Added
+- Overrides from the `.env` file and process environment variables, for values such as API keys that
+  shouldn't be committed. `ApiSettings__ApiKey=secret` sets `ApiKey` in the `ApiSettings` section. They are
+  applied after every config file, and process environment variables take precedence over `.env` entries.
+  Only keys containing `__` are applied, matching is case-insensitive, missing paths are created, and a
+  numeric segment indexes into an array.
+- `IConfigDiagnostics.OverriddenKeys`: the override keys that were applied, without their values.
+  Implementations of `IConfigDiagnostics` outside this package need to add it.
+
 ## [3.0.0] - 2026/10/19
 ### Breaking
 - Environment config is now **merged value by value** instead of replacing whole sections. A key missing

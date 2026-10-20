@@ -242,6 +242,129 @@ namespace Byrniee.UnityConfiguration.Editor.Tests
         }
 
         [Test]
+        public void EnvFileEntry_OverridesConfigValue()
+        {
+            WriteFile("config.json", @"{ ""ApiSettings"": { ""BaseUrl"": ""https://host:5601"", ""ApiKey"": """" } }");
+            WriteFile(".env", "UNITY_ENVIRONMENT=Staging\nApiSettings__ApiKey=\"secret\"\n");
+
+            ConfigFactory factory = CreateFactory(null);
+            ApiSettings api = factory.Create<ApiSettings>("ApiSettings").Value;
+
+            Assert.That(factory.EnvironmentName, Is.EqualTo("Staging"));
+            Assert.That(api.ApiKey, Is.EqualTo("secret"));
+            Assert.That(api.BaseUrl, Is.EqualTo("https://host:5601"));
+            Assert.That(factory.OverriddenKeys, Is.EqualTo(new[] { "ApiSettings__ApiKey" }));
+        }
+
+        [Test]
+        public void Override_AppliedAfterEnvironmentLayers()
+        {
+            WriteFile("config.json", @"{ ""ApiSettings"": { ""ApiKey"": ""base"" } }");
+            WriteFile("config.Staging.json", @"{ ""ApiSettings"": { ""ApiKey"": ""staging"" } }");
+            WriteFile(".env", "ApiSettings__ApiKey=secret");
+
+            ApiSettings api = CreateFactory("Staging").Create<ApiSettings>("ApiSettings").Value;
+
+            Assert.That(api.ApiKey, Is.EqualTo("secret"));
+        }
+
+        [Test]
+        public void ProcessVariable_OverridesEnvFileEntry()
+        {
+            WriteFile("config.json", @"{ ""ApiSettings"": { ""ApiKey"": """" } }");
+            WriteFile(".env", "ApiSettings__ApiKey=from-file");
+
+            ConfigFactory factory = CreateFactory(null, new Dictionary<string, string> { { "ApiSettings__ApiKey", "from-variable" } });
+
+            Assert.That(factory.Create<ApiSettings>("ApiSettings").Value.ApiKey, Is.EqualTo("from-variable"));
+            Assert.That(factory.OverriddenKeys, Is.EqualTo(new[] { "ApiSettings__ApiKey" }));
+        }
+
+        [Test]
+        public void Override_MatchesExistingKeysCaseInsensitively()
+        {
+            WriteFile("config.json", @"{ ""ApiSettings"": { ""ApiKey"": """" } }");
+            WriteFile(".env", "apisettings__apikey=secret");
+
+            ConfigFactory factory = CreateFactory(null);
+            ApiSettings api = factory.Create<ApiSettings>("ApiSettings").Value;
+
+            Assert.That(api.ApiKey, Is.EqualTo("secret"));
+            Assert.That(factory.GetUnrequestedSections(), Is.Empty, "No differently-cased duplicate section is added.");
+        }
+
+        [Test]
+        public void Override_CreatesMissingPathAndConvertsType()
+        {
+            WriteFile("config.json", "{}");
+            WriteFile(".env", "Server__Port=81\nNested__Inner__Deeper__X=5\n");
+
+            ConfigFactory factory = CreateFactory(null);
+
+            Assert.That(factory.Create<ServerSettings>("Server").Value.Port, Is.EqualTo(81));
+            Assert.That(factory.Create<NestedSettings>("Nested").Value.Inner.Deeper.X, Is.EqualTo(5));
+        }
+
+        [Test]
+        public void Override_WorksWithoutConfigFile()
+        {
+            WriteFile(".env", "ApiSettings__ApiKey=secret");
+
+            ApiSettings api = CreateFactory(null).Create<ApiSettings>("ApiSettings").Value;
+
+            Assert.That(api.ApiKey, Is.EqualTo("secret"));
+        }
+
+        [Test]
+        public void Override_IndexesIntoArrays()
+        {
+            WriteFile("config.json", @"{ ""Dmx"": { ""Connections"": [ ""a"", ""b"", ""c"" ] } }");
+            WriteFile(".env", "Dmx__Connections__1=x\nDmx__Connections__3=d\n");
+
+            DmxSettings dmx = CreateFactory(null).Create<DmxSettings>("Dmx").Value;
+
+            Assert.That(dmx.Connections, Is.EqualTo(new[] { "a", "x", "c", "d" }));
+        }
+
+        [Test]
+        public void Override_IgnoresKeysWithoutSeparatorOrWithEmptySegments()
+        {
+            WriteFile("config.json", "{}");
+            WriteFile(".env", "OTHER=1\nServer__=1\n");
+
+            ConfigFactory factory = CreateFactory(null, new Dictionary<string, string>
+            {
+                { "PATH", "C:\\Windows" },
+                { "__COMPAT_LAYER", "RunAsInvoker" },
+                { "Server____Port", "1" },
+            });
+
+            Assert.That(factory.OverriddenKeys, Is.Empty);
+            Assert.That(factory.GetUnrequestedSections(), Is.Empty);
+        }
+
+        [Test]
+        public void RealProcessVariable_OverridesConfigValue()
+        {
+            const string key = "UnityConfigurationTests__Name";
+            WriteFile("config.json", @"{ ""UnityConfigurationTests"": { ""Name"": ""base"" } }");
+
+            string previous = Environment.GetEnvironmentVariable(key);
+            Environment.SetEnvironmentVariable(key, "from-variable");
+            try
+            {
+                ConfigFactory factory = new ConfigFactory(directory);
+
+                Assert.That(factory.Create<OtherSettings>("UnityConfigurationTests").Value.Name, Is.EqualTo("from-variable"));
+                Assert.That(factory.OverriddenKeys, Does.Contain(key));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(key, previous);
+            }
+        }
+
+        [Test]
         public void GetLayerFileNames_SplitsOnDots()
         {
             Assert.That(ConfigEnvironment.GetLayerFileNames(null), Is.EqualTo(new[] { "config.json" }));
@@ -254,6 +377,14 @@ namespace Byrniee.UnityConfiguration.Editor.Tests
         private ConfigFactory CreateFactory(string environmentVariable)
         {
             return new ConfigFactory(directory, name => name == ConfigEnvironment.VariableName ? environmentVariable : null);
+        }
+
+        private ConfigFactory CreateFactory(string environmentVariable, Dictionary<string, string> environmentVariables)
+        {
+            return new ConfigFactory(
+                directory,
+                name => name == ConfigEnvironment.VariableName ? environmentVariable : null,
+                environmentVariables);
         }
 
         private void WriteBaseAndEnvironmentLayers()
@@ -285,6 +416,13 @@ namespace Byrniee.UnityConfiguration.Editor.Tests
         private class OtherSettings
         {
             public string Name { get; set; }
+        }
+
+        private class ApiSettings
+        {
+            public string BaseUrl { get; set; }
+
+            public string ApiKey { get; set; }
         }
 
         private class NestedSettings

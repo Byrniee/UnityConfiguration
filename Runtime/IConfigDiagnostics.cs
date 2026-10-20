@@ -18,6 +18,13 @@ namespace Byrniee.UnityConfiguration
         IReadOnlyList<string> LoadedFiles { get; }
 
         /// <summary>
+        /// Gets the <c>.env</c> and process environment variable keys (such as <c>ApiSettings__ApiKey</c>)
+        /// that were applied as overrides, in the order they were first applied. Values are not included,
+        /// so this is safe to log.
+        /// </summary>
+        IReadOnlyList<string> OverriddenKeys { get; }
+
+        /// <summary>
         /// Gets the top-level sections that were loaded but have not been requested through
         /// <see cref="IConfigFactory.Create{T}"/>. Call after startup to spot misspelt or stale sections.
         /// </summary>
